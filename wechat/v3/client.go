@@ -3,27 +3,34 @@ package wechat
 import (
 	"context"
 	"crypto/rsa"
+	"errors"
+	"strings"
 	"sync"
 
 	"github.com/go-pay/crypto/xpem"
 	"github.com/go-pay/gopay"
-	"github.com/go-pay/xhttp"
+	"github.com/go-pay/gopay/pkg/xhttp"
+	"github.com/go-pay/smap"
+	"github.com/go-pay/xlog"
 )
 
 // ClientV3 微信支付 V3
 type ClientV3 struct {
-	Mchid       string
-	ApiV3Key    []byte
-	SerialNo    string
-	WxSerialNo  string
-	autoSign    bool
-	rwMu        sync.RWMutex
-	hc          *xhttp.Client
-	privateKey  *rsa.PrivateKey
-	wxPublicKey *rsa.PublicKey
-	ctx         context.Context
-	DebugSwitch gopay.DebugSwitch
-	SnCertMap   map[string]*rsa.PublicKey // key: serial_no
+	Mchid         string
+	ApiV3Key      []byte
+	SerialNo      string
+	WxSerialNo    string
+	proxyHost     string // 代理host地址
+	autoSign      bool
+	rwMu          sync.RWMutex
+	hc            *xhttp.Client
+	privateKey    *rsa.PrivateKey
+	wxPublicKey   *rsa.PublicKey
+	ctx           context.Context
+	DebugSwitch   gopay.DebugSwitch
+	requestIdFunc xhttp.RequestIdHandler
+	logger        xlog.XLogger
+	SnCertMap     smap.Map[string, *rsa.PublicKey] // key: serial_no
 }
 
 // NewClientV3 初始化微信客户端 V3
@@ -39,16 +46,27 @@ func NewClientV3(mchid, serialNo, apiV3Key, privateKey string) (client *ClientV3
 	if err != nil {
 		return nil, err
 	}
+	logger := xlog.NewLogger()
+	logger.SetLevel(xlog.DebugLevel)
 	client = &ClientV3{
-		Mchid:       mchid,
-		SerialNo:    serialNo,
-		ApiV3Key:    []byte(apiV3Key),
-		privateKey:  priKey,
-		ctx:         context.Background(),
-		DebugSwitch: gopay.DebugOff,
-		hc:          xhttp.NewClient(),
+		Mchid:         mchid,
+		SerialNo:      serialNo,
+		ApiV3Key:      []byte(apiV3Key),
+		privateKey:    priKey,
+		ctx:           context.Background(),
+		DebugSwitch:   gopay.DebugOff,
+		logger:        logger,
+		requestIdFunc: defaultRequestIdFunc,
+		hc:            xhttp.NewClient(),
 	}
 	return client, nil
+}
+
+// SetRequestIdFunc 设置自定义请求头 Request-Id 处理方法
+func (c *ClientV3) SetRequestIdFunc(requestIdFunc xhttp.RequestIdHandler) {
+	if requestIdFunc != nil {
+		c.requestIdFunc = requestIdFunc
+	}
 }
 
 // AutoVerifySign 开启请求完自动验签功能（默认不开启，推荐开启）
@@ -58,25 +76,41 @@ func (c *ClientV3) AutoVerifySign(autoRefresh ...bool) (err error) {
 	if err != nil {
 		return err
 	}
-	if len(c.SnCertMap) <= 0 {
-		c.SnCertMap = make(map[string]*rsa.PublicKey)
-	}
 	for sn, cert := range certMap {
 		// decode cert
 		pubKey, err := xpem.DecodePublicKey([]byte(cert))
 		if err != nil {
 			return err
 		}
-		c.SnCertMap[sn] = pubKey
+		c.SnCertMap.Store(sn, pubKey)
+		if sn == wxSerialNo {
+			c.wxPublicKey = pubKey
+		}
 	}
 	c.WxSerialNo = wxSerialNo
-	c.wxPublicKey = c.SnCertMap[wxSerialNo]
 	if len(autoRefresh) == 1 && !autoRefresh[0] {
-		return
+		return nil
 	}
 	c.autoSign = true
 	go c.autoCheckCertProc()
-	return
+	return nil
+}
+
+// wxPublicKeyContent：微信公钥证书文件内容[]byte
+// wxPublicKeyID：微信公钥证书ID
+func (c *ClientV3) AutoVerifySignByCert(wxPublicKeyContent []byte, wxPublicKeyID string) (err error) {
+	pubKey, err := xpem.DecodePublicKey(wxPublicKeyContent)
+	if err != nil {
+		return err
+	}
+	if pubKey == nil {
+		return errors.New("xpem.DecodePublicKey() failed, pubKey is nil")
+	}
+	c.SnCertMap.Store(wxPublicKeyID, pubKey)
+	c.wxPublicKey = pubKey
+	c.WxSerialNo = wxPublicKeyID
+	c.autoSign = true
+	return nil
 }
 
 // SetBodySize 设置http response body size(MB)
@@ -84,4 +118,36 @@ func (c *ClientV3) SetBodySize(sizeMB int) {
 	if sizeMB > 0 {
 		c.hc.SetBodySize(sizeMB)
 	}
+}
+
+// SetHttpClient 设置自定义的xhttp.Client
+func (c *ClientV3) SetHttpClient(client *xhttp.Client) {
+	if client != nil {
+		c.hc = client
+	}
+}
+
+// SetLogger 设置自定义 logger
+func (c *ClientV3) SetLogger(logger xlog.XLogger) {
+	if logger != nil {
+		c.logger = logger
+	}
+}
+
+// SetProxyHost 设置的 ProxyHost
+// 使用场景：
+// 1. 部署环境无法访问互联网，可以通过代理服务器访问
+// 2. 不设置则默认 https://api.mch.weixin.qq.com
+func (c *ClientV3) SetProxyHost(proxyHost string) {
+	before, found := strings.CutSuffix(proxyHost, "/")
+	if found {
+		c.proxyHost = before
+		return
+	}
+	c.proxyHost = proxyHost
+}
+
+// GetProxyHost 返回当前的 ProxyHost
+func (c *ClientV3) GetProxyHost() string {
+	return c.proxyHost
 }

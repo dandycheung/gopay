@@ -16,9 +16,8 @@ import (
 	"strings"
 
 	"github.com/go-pay/gopay"
+	"github.com/go-pay/gopay/pkg/xhttp"
 	"github.com/go-pay/util"
-	"github.com/go-pay/xhttp"
-	"github.com/go-pay/xlog"
 	"golang.org/x/crypto/pkcs12"
 )
 
@@ -41,6 +40,16 @@ func (w *Client) SetCountry(country Country) (client *Client) {
 	default:
 		w.BaseURL = baseUrlCh
 	}
+	w.mu.Unlock()
+	return w
+}
+
+// SetProxyUrl 设置代理 Url
+// 使用场景：
+// 1. 部署环境无法访问互联网，可以通过代理服务器访问
+func (w *Client) SetProxyUrl(proxyUrl string) (client *Client) {
+	w.mu.Lock()
+	w.BaseURL = proxyUrl
 	w.mu.Unlock()
 	return w
 }
@@ -81,7 +90,7 @@ func (w *Client) addCertFileContentOrPath(certFile, keyFile, pkcs12File any) (er
 	if err != nil {
 		return
 	}
-	w.tlsHc.SetTLSConfig(config)
+	w.tlsHc.SetHttpTLSConfig(config)
 	return
 }
 
@@ -106,7 +115,7 @@ func (w *Client) addCertConfig(certFile, keyFile, pkcs12File any) (tlsConfig *tl
 			keyPem, err = os.ReadFile(keyFile.(string))
 		}
 		if err != nil {
-			return nil, fmt.Errorf("os.ReadFile：%w", err)
+			return nil, fmt.Errorf("os.ReadFile: %w", err)
 		}
 	} else if pkcs12File != nil {
 		var pfxData []byte
@@ -114,12 +123,12 @@ func (w *Client) addCertConfig(certFile, keyFile, pkcs12File any) (tlsConfig *tl
 			pfxData = pkcs12File.([]byte)
 		} else {
 			if pfxData, err = os.ReadFile(pkcs12File.(string)); err != nil {
-				return nil, fmt.Errorf("os.ReadFile：%w", err)
+				return nil, fmt.Errorf("os.ReadFile: %w", err)
 			}
 		}
 		blocks, err := pkcs12.ToPEM(pfxData, w.MchId)
 		if err != nil {
-			return nil, fmt.Errorf("pkcs12.ToPEM：%w", err)
+			return nil, fmt.Errorf("pkcs12.ToPEM: %w", err)
 		}
 		for _, b := range blocks {
 			keyPem = append(keyPem, pem.EncodeToMemory(b)...)
@@ -128,7 +137,7 @@ func (w *Client) addCertConfig(certFile, keyFile, pkcs12File any) (tlsConfig *tl
 	}
 	if certPem != nil && keyPem != nil {
 		if certificate, err = tls.X509KeyPair(certPem, keyPem); err != nil {
-			return nil, fmt.Errorf("tls.LoadX509KeyPair：%w", err)
+			return nil, fmt.Errorf("tls.LoadX509KeyPair: %w", err)
 		}
 		tlsConfig = &tls.Config{
 			Certificates:       []tls.Certificate{certificate},
@@ -195,7 +204,7 @@ func GetReleaseSign(apiKey string, signType string, bm gopay.BodyMap) (sign stri
 func (w *Client) getReleaseSign(apiKey string, signType string, bm gopay.BodyMap) (sign string) {
 	signParams := bm.EncodeWeChatSignParams(apiKey)
 	if w.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Wechat_Request_SignStr: %s", signParams)
+		w.logger.Debugf("Wechat_Request_SignStr: %s", signParams)
 	}
 	var h hash.Hash
 	if signType == SignType_HMAC_SHA256 {
@@ -239,7 +248,7 @@ func (w *Client) getSandBoxSign(ctx context.Context, mchId, apiKey string, bm go
 	h = md5.New()
 	signParams := bm.EncodeWeChatSignParams(sandBoxApiKey)
 	if w.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Wechat_Request_SignStr: %s", signParams)
+		w.logger.Debugf("Wechat_Request_SignStr: %s", signParams)
 	}
 	h.Write([]byte(signParams))
 	sign = strings.ToUpper(hex.EncodeToString(h.Sum(nil)))

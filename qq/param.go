@@ -32,7 +32,7 @@ func (q *Client) AddCertFilePath(certFilePath, keyFilePath, pkcs12FilePath any) 
 	if err != nil {
 		return
 	}
-	q.tlsHc.SetTLSConfig(config)
+	q.tlsHc.SetHttpTLSConfig(config)
 	return nil
 }
 
@@ -147,7 +147,7 @@ func (q *Client) addCertConfig(certFile, keyFile, pkcs12File any) (tlsConfig *tl
 			keyPem, err = os.ReadFile(keyFile.(string))
 		}
 		if err != nil {
-			return nil, fmt.Errorf("os.ReadFile：%w", err)
+			return nil, fmt.Errorf("os.ReadFile: %w", err)
 		}
 	} else if pkcs12File != nil {
 		var pfxData []byte
@@ -155,12 +155,12 @@ func (q *Client) addCertConfig(certFile, keyFile, pkcs12File any) (tlsConfig *tl
 			pfxData = pkcs12File.([]byte)
 		} else {
 			if pfxData, err = os.ReadFile(pkcs12File.(string)); err != nil {
-				return nil, fmt.Errorf("os.ReadFile：%w", err)
+				return nil, fmt.Errorf("os.ReadFile: %w", err)
 			}
 		}
 		blocks, err := pkcs12.ToPEM(pfxData, q.MchId)
 		if err != nil {
-			return nil, fmt.Errorf("pkcs12.ToPEM：%w", err)
+			return nil, fmt.Errorf("pkcs12.ToPEM: %w", err)
 		}
 		for _, b := range blocks {
 			keyPem = append(keyPem, pem.EncodeToMemory(b)...)
@@ -169,7 +169,7 @@ func (q *Client) addCertConfig(certFile, keyFile, pkcs12File any) (tlsConfig *tl
 	}
 	if certPem != nil && keyPem != nil {
 		if certificate, err = tls.X509KeyPair(certPem, keyPem); err != nil {
-			return nil, fmt.Errorf("tls.LoadX509KeyPair：%w", err)
+			return nil, fmt.Errorf("tls.LoadX509KeyPair: %w", err)
 		}
 		tlsConfig = &tls.Config{
 			Certificates:       []tls.Certificate{certificate},

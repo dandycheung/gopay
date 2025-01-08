@@ -21,7 +21,7 @@ import (
 
 	xaes "github.com/go-pay/crypto/aes"
 	"github.com/go-pay/gopay"
-	"github.com/go-pay/xhttp"
+	"github.com/go-pay/gopay/pkg/xhttp"
 )
 
 // ParseNotifyToBodyMap 解析微信支付异步通知的结果到BodyMap（推荐）
@@ -32,7 +32,7 @@ func ParseNotifyToBodyMap(req *http.Request) (bm gopay.BodyMap, err error) {
 	bs, err := io.ReadAll(io.LimitReader(req.Body, int64(3<<20))) // default 3MB change the size you want;
 	defer req.Body.Close()
 	if err != nil {
-		return nil, fmt.Errorf("ioutil.ReadAll：%w", err)
+		return nil, fmt.Errorf("ioutil.ReadAll: %w", err)
 	}
 	bm = make(gopay.BodyMap)
 	if err = xml.Unmarshal(bs, &bm); err != nil {
@@ -48,7 +48,7 @@ func ParseNotify(req *http.Request) (notifyReq *NotifyRequest, err error) {
 	err = xml.NewDecoder(req.Body).Decode(notifyReq)
 	defer req.Body.Close()
 	if err != nil {
-		return nil, fmt.Errorf("xml.NewDecoder.Decode：%w", err)
+		return nil, fmt.Errorf("xml.NewDecoder.Decode: %w", err)
 	}
 	return
 }
@@ -62,7 +62,7 @@ func ParseRefundNotify(req *http.Request) (notifyReq *RefundNotifyRequest, err e
 	err = xml.NewDecoder(req.Body).Decode(notifyReq)
 	defer req.Body.Close()
 	if err != nil {
-		return nil, fmt.Errorf("xml.NewDecoder.Decode：%w", err)
+		return nil, fmt.Errorf("xml.NewDecoder.Decode: %w", err)
 	}
 	return
 }
