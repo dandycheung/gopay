@@ -7,8 +7,7 @@ import (
 	"time"
 
 	"github.com/go-pay/gopay"
-	"github.com/go-pay/xhttp"
-	"github.com/go-pay/xlog"
+	"github.com/go-pay/gopay/pkg/xhttp"
 	"github.com/go-pay/xtime"
 )
 
@@ -20,14 +19,13 @@ func (a *Client) PostAliPayAPISelfV2(ctx context.Context, bodyMap gopay.BodyMap,
 		bs, bodyBs []byte
 	)
 	// check if there is biz_content
-	bz := bodyMap.GetInterface("biz_content")
+	bz := bodyMap.GetAny("biz_content")
 	if bzBody, ok := bz.(gopay.BodyMap); ok {
 		if bodyBs, err = json.Marshal(bzBody); err != nil {
-			return fmt.Errorf("json.Marshal(%v)：%w", bzBody, err)
+			return fmt.Errorf("json.Marshal(%v): %w", bzBody, err)
 		}
 		bodyMap.Set("biz_content", string(bodyBs))
 	}
-
 	if bs, err = a.doAliPaySelf(ctx, bodyMap, method); err != nil {
 		return err
 	}
@@ -71,7 +69,7 @@ func (a *Client) PostFileAliPayAPISelfV2(ctx context.Context, bm gopay.BodyMap, 
 		bm.Set(k, v)
 	}
 	if a.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Alipay_Request: %s", bm.JsonBody())
+		a.logger.Debugf("Alipay_Request: %s", bm.JsonBody())
 	}
 	if a.IsProd {
 		url = baseUrlUtf8
@@ -84,7 +82,7 @@ func (a *Client) PostFileAliPayAPISelfV2(ctx context.Context, bm gopay.BodyMap, 
 		return nil
 	}
 	if a.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Alipay_Response: %s%d %s%s", xlog.Red, res.StatusCode, xlog.Reset, string(bs))
+		a.logger.Debugf("Alipay_Response: %d, %s", res.StatusCode, string(bs))
 	}
 	if res.StatusCode != 200 {
 		return fmt.Errorf("HTTP Request Error, StatusCode = %d", res.StatusCode)
@@ -112,7 +110,7 @@ func (a *Client) doAliPaySelf(ctx context.Context, bm gopay.BodyMap, method stri
 		bm.Set("sign", sign)
 	}
 	if a.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Alipay_Request: %s", bm.JsonBody())
+		a.logger.Debugf("Alipay_Request: %s", bm.JsonBody())
 	}
 	if a.IsProd {
 		url = baseUrlUtf8
@@ -124,7 +122,7 @@ func (a *Client) doAliPaySelf(ctx context.Context, bm gopay.BodyMap, method stri
 		return nil, err
 	}
 	if a.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Alipay_Response: %s%d %s%s", xlog.Red, res.StatusCode, xlog.Reset, string(bs))
+		a.logger.Debugf("Alipay_Response: %d, %s", res.StatusCode, string(bs))
 	}
 	if res.StatusCode != 200 {
 		return nil, fmt.Errorf("HTTP Request Error, StatusCode = %d", res.StatusCode)
@@ -140,20 +138,22 @@ func (a *Client) doAliPay(ctx context.Context, bm gopay.BodyMap, method string, 
 	)
 	if bm != nil {
 		_, has := appAuthTokenInBizContent[method]
-		if has {
-			if bodyBs, err = json.Marshal(bm); err != nil {
-				return nil, fmt.Errorf("json.Marshal：%w", err)
-			}
-			bizContent = string(bodyBs)
-			bm.Remove("app_auth_token")
-		} else {
+		if !has {
 			aat := bm.GetString("app_auth_token")
 			bm.Remove("app_auth_token")
 			if bodyBs, err = json.Marshal(bm); err != nil {
-				return nil, fmt.Errorf("json.Marshal：%w", err)
+				return nil, fmt.Errorf("json.Marshal: %w", err)
 			}
 			bizContent = string(bodyBs)
-			bm.Set("app_auth_token", aat)
+			if aat != "" {
+				bm.Set("app_auth_token", aat)
+			}
+		} else {
+			if bodyBs, err = json.Marshal(bm); err != nil {
+				return nil, fmt.Errorf("json.Marshal: %w", err)
+			}
+			bizContent = string(bodyBs)
+			bm.Remove("app_auth_token")
 		}
 	}
 	// 处理公共参数
@@ -162,7 +162,9 @@ func (a *Client) doAliPay(ctx context.Context, bm gopay.BodyMap, method string, 
 		return nil, err
 	}
 	switch method {
-	case "alipay.trade.app.pay", "alipay.fund.auth.order.app.freeze":
+	case "alipay.trade.app.pay", "alipay.fund.auth.order.app.freeze",
+		"alipay.fund.trans.app.pay", "alipay.user.agreement.page.sign",
+		"zhima.credit.pe.zmgo.sign.apply", "zhima.credit.payafteruse.creditagreement.sign":
 		return []byte(param), nil
 	case "alipay.trade.wap.pay", "alipay.trade.page.pay", "alipay.user.certify.open.certify":
 		if !a.IsProd {
@@ -179,7 +181,7 @@ func (a *Client) doAliPay(ctx context.Context, bm gopay.BodyMap, method string, 
 			return nil, err
 		}
 		if a.DebugSwitch == gopay.DebugOn {
-			xlog.Debugf("Alipay_Response: %s%d %s%s", xlog.Red, res.StatusCode, xlog.Reset, string(bs))
+			a.logger.Debugf("Alipay_Response: %d, %s", res.StatusCode, string(bs))
 		}
 		if res.StatusCode != 200 {
 			return nil, fmt.Errorf("HTTP Request Error, StatusCode = %d", res.StatusCode)
@@ -196,20 +198,20 @@ func (a *Client) DoAliPay(ctx context.Context, bm gopay.BodyMap, method string, 
 	)
 	if bm != nil {
 		_, has := appAuthTokenInBizContent[method]
-		if has {
-			if bodyBs, err = json.Marshal(bm); err != nil {
-				return nil, fmt.Errorf("json.Marshal：%w", err)
-			}
-			bizContent = string(bodyBs)
-			bm.Remove("app_auth_token")
-		} else {
+		if !has {
 			aat := bm.GetString("app_auth_token")
 			bm.Remove("app_auth_token")
 			if bodyBs, err = json.Marshal(bm); err != nil {
-				return nil, fmt.Errorf("json.Marshal：%w", err)
+				return nil, fmt.Errorf("json.Marshal: %w", err)
 			}
 			bizContent = string(bodyBs)
 			bm.Set("app_auth_token", aat)
+		} else {
+			if bodyBs, err = json.Marshal(bm); err != nil {
+				return nil, fmt.Errorf("json.Marshal: %w", err)
+			}
+			bizContent = string(bodyBs)
+			bm.Remove("app_auth_token")
 		}
 	}
 	// 处理公共参数
@@ -218,7 +220,9 @@ func (a *Client) DoAliPay(ctx context.Context, bm gopay.BodyMap, method string, 
 		return nil, err
 	}
 	switch method {
-	case "alipay.trade.app.pay", "alipay.fund.auth.order.app.freeze":
+	case "alipay.trade.app.pay", "alipay.fund.auth.order.app.freeze",
+		"alipay.fund.trans.app.pay", "alipay.user.agreement.page.sign",
+		"zhima.credit.pe.zmgo.sign.apply", "zhima.credit.payafteruse.creditagreement.sign":
 		return []byte(param), nil
 	case "alipay.trade.wap.pay", "alipay.trade.page.pay", "alipay.user.certify.open.certify":
 		if !a.IsProd {
@@ -235,7 +239,7 @@ func (a *Client) DoAliPay(ctx context.Context, bm gopay.BodyMap, method string, 
 			return nil, err
 		}
 		if a.DebugSwitch == gopay.DebugOn {
-			xlog.Debugf("Alipay_Response: %s%d %s%s", xlog.Red, res.StatusCode, xlog.Reset, string(bs))
+			a.logger.Debugf("Alipay_Response: %d, %s", res.StatusCode, string(bs))
 		}
 		if res.StatusCode != 200 {
 			return nil, fmt.Errorf("HTTP Request Error, StatusCode = %d", res.StatusCode)
@@ -244,7 +248,7 @@ func (a *Client) DoAliPay(ctx context.Context, bm gopay.BodyMap, method string, 
 	}
 }
 
-// 保持和官方 SDK 命名方式一致
+// Deprecated
 func (a *Client) PageExecute(ctx context.Context, bm gopay.BodyMap, method string, authToken ...string) (url string, err error) {
 	var (
 		bizContent string
@@ -252,20 +256,20 @@ func (a *Client) PageExecute(ctx context.Context, bm gopay.BodyMap, method strin
 	)
 	if bm != nil {
 		_, has := appAuthTokenInBizContent[method]
-		if has {
-			if bodyBs, err = json.Marshal(bm); err != nil {
-				return "", fmt.Errorf("json.Marshal：%w", err)
-			}
-			bizContent = string(bodyBs)
-			bm.Remove("app_auth_token")
-		} else {
+		if !has {
 			aat := bm.GetString("app_auth_token")
 			bm.Remove("app_auth_token")
 			if bodyBs, err = json.Marshal(bm); err != nil {
-				return "", fmt.Errorf("json.Marshal：%w", err)
+				return "", fmt.Errorf("json.Marshal: %w", err)
 			}
 			bizContent = string(bodyBs)
 			bm.Set("app_auth_token", aat)
+		} else {
+			if bodyBs, err = json.Marshal(bm); err != nil {
+				return "", fmt.Errorf("json.Marshal: %w", err)
+			}
+			bizContent = string(bodyBs)
+			bm.Remove("app_auth_token")
 		}
 	}
 	// 处理公共参数
@@ -281,19 +285,13 @@ func (a *Client) PageExecute(ctx context.Context, bm gopay.BodyMap, method strin
 }
 
 // 文件上传
-func (a *Client) FileRequest(ctx context.Context, bm gopay.BodyMap, file *gopay.File, method string) (bs []byte, err error) {
+func (a *Client) FileUploadRequest(ctx context.Context, bm gopay.BodyMap, method string) (bs []byte, err error) {
 	var (
-		bodyStr string
-		bodyBs  []byte
-		aat     string
+		aat string
 	)
 	if bm != nil {
 		aat = bm.GetString("app_auth_token")
 		bm.Remove("app_auth_token")
-		if bodyBs, err = json.Marshal(bm); err != nil {
-			return nil, fmt.Errorf("json.Marshal：%w", err)
-		}
-		bodyStr = string(bodyBs)
 	}
 	pubBody := make(gopay.BodyMap)
 	pubBody.Set("app_id", a.AppId).
@@ -302,7 +300,6 @@ func (a *Client) FileRequest(ctx context.Context, bm gopay.BodyMap, file *gopay.
 		Set("charset", a.Charset).
 		Set("sign_type", a.SignType).
 		Set("version", "1.0").
-		Set("scene", "SYNC_ORDER").
 		Set("timestamp", time.Now().Format(xtime.TimeLayout))
 
 	if a.AppCertSN != gopay.NULL {
@@ -317,40 +314,45 @@ func (a *Client) FileRequest(ctx context.Context, bm gopay.BodyMap, file *gopay.
 	if a.location != nil {
 		pubBody.Set("timestamp", time.Now().In(a.location).Format(xtime.TimeLayout))
 	}
-	if a.NotifyUrl != gopay.NULL { //如果返回url为空，传过来的返回url不为空
-		//fmt.Println("url不为空？", a.NotifyUrl)
+	if a.NotifyUrl != gopay.NULL {
 		pubBody.Set("notify_url", a.NotifyUrl)
 	}
-	//fmt.Println("notify,", pubBody.JsonBody())
+	// default use app_auth_token
 	if a.AppAuthToken != gopay.NULL {
 		pubBody.Set("app_auth_token", a.AppAuthToken)
 	}
+	// if user set app_auth_token in body_map, use this
 	if aat != gopay.NULL {
 		pubBody.Set("app_auth_token", aat)
 	}
-	if bodyStr != gopay.NULL {
-		pubBody.Set("biz_content", bodyStr)
+	// 文件上传除文件外其他参数也需要签名
+	for k, v := range bm {
+		if _, ok := v.(*gopay.File); !ok {
+			pubBody.Set(k, v)
+		}
 	}
+	// sign
 	sign, err := a.getRsaSign(pubBody, pubBody.GetString("sign_type"))
 	if err != nil {
 		return nil, fmt.Errorf("GetRsaSign Error: %w", err)
 	}
-	//pubBody.Set("file_content", file.Content)
+	// 文件签名完移除query params
+	for k := range bm {
+		pubBody.Remove(k)
+	}
 	pubBody.Set("sign", sign)
 	if a.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Alipay_Request: %s", pubBody.JsonBody())
+		a.logger.Debugf("Alipay_Query_Request: %s", pubBody.JsonBody())
 	}
-	param := pubBody.EncodeURLParams()
-	url := baseUrlUtf8 + "&" + param
-	bm.Reset()
-	bm.SetFormFile("file_content", file)
+	url := baseUrlUtf8 + "&" + pubBody.EncodeURLParams()
+
 	res, bs, err := a.hc.Req(xhttp.TypeMultipartFormData).Post(url).
 		SendMultipartBodyMap(bm).EndBytes(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if a.DebugSwitch == gopay.DebugOn {
-		xlog.Debugf("Alipay_Response: %s%d %s%s", xlog.Red, res.StatusCode, xlog.Reset, string(bs))
+		a.logger.Debugf("Alipay_Response: %d, %s", res.StatusCode, string(bs))
 	}
 	if res.StatusCode != 200 {
 		return nil, fmt.Errorf("HTTP Request Error, StatusCode = %d", res.StatusCode)

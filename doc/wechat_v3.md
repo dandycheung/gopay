@@ -48,6 +48,9 @@ if err != nil {
 // 自定义配置http请求接收返回结果body大小，默认 10MB
 client.SetBodySize() // 没有特殊需求，可忽略此配置
 
+// 设置自定义RequestId生成方法，非必须
+client.SetRequestIdFunc()
+
 // 打开Debug开关，输出日志，默认是关闭的
 client.DebugSwitch = gopay.DebugOn
 ```
@@ -234,6 +237,7 @@ wechat.V3DecryptCombineNotifyCipherText()
     * JSAPI/小程序下单：`client.V3TransactionJsapi()`
     * Native下单：`client.V3TransactionNative()`
     * H5下单：`client.V3TransactionH5()`
+    * QQ小程序H5下单：`client.V3QQTransactionH5()`
     * 商户订单号/微信支付订单号 查询订单：`client.V3TransactionQueryOrder()`
     * 关闭订单：`client.V3TransactionCloseOrder()`
 * <font color='#07C160' size='4'>基础支付（服务商）</font>
@@ -248,6 +252,7 @@ wechat.V3DecryptCombineNotifyCipherText()
     * 合单下单-JSAPI/小程序：`client.V3CombineTransactionJsapi()`
     * 合单下单-NATIVE：`client.V3CombineTransactionNative()`
     * 合单下单-H5：`client.V3CombineTransactionH5()`
+    * 合单QQ小程序下单-H5：`client.V3CombineQQTransactionH5()`
     * 合单查询订单：`client.V3CombineQueryOrder()`
     * 合单关闭订单：`client.V3CombineCloseOrder()`
 * <font color='#07C160' size='4'>退款</font>
@@ -338,9 +343,28 @@ wechat.V3DecryptCombineNotifyCipherText()
     * 终止合作关系：`client.V3PartnershipsTerminate()`
     * 查询合作关系列表：`client.V3PartnershipsList()`
 * <font color='#07C160' size='4'>支付有礼</font>
-    * 待实现-[文档](https://pay.weixin.qq.com/docs/merchant/apis/gift-activity/activity/create-full-send-act.html)
+    * 创建全场满额送活动：`client.V3PayGiftActivityCreate()`
+    * 获取支付有礼活动列表：`client.V3PayGiftActivityList()`
+    * 获取活动详情：`client.V3PayGiftActivityDetail()`
+    * 获取活动指定商品列表：`client.V3PayGiftActivityGoods()`
+    * 终止活动：`client.V3PayGiftActivityTerminate()`
+    * 获取活动发券商户号：`client.V3PayGiftActivityMerchant()`
+    * 新增活动发券商户号：`client.V3PayGiftActivityMerchantAdd()`
+    * 删除活动发券商户号：`client.V3PayGiftActivityMerchantDelete()`
 * <font color='#07C160' size='4'>电子发票</font>
-    * 待实现-[文档](https://pay.weixin.qq.com/docs/merchant/apis/fapiao/fapiao-card-template/create-fapiao-card-template.html)
+    * 创建电子发票卡券模板：`client.V3InvoiceCardTemplateCreate()`
+    * 配置开发选项：`client.V3InvoiceMerchantDevConfig()`
+    * 查询商户配置的开发选项：`client.V3InvoiceMerchantDevConfigQuery()`
+    * 查询电子发票：`client.V3InvoiceQuery()`
+    * 获取抬头填写链接：`client.V3InvoiceUserTitleUrl()`
+    * 获取用户填写的抬头：`client.V3InvoiceUserTitle()`
+    * 获取商户开票基础信息：`client.V3InvoiceMerchantBaseInfo()`
+    * 获取商户可开具的商品和服务税收分类编码对照表：`client.V3InvoiceMerchantTaxCodes()`
+    * 开具电子发票：`client.V3InvoiceCreate()`
+    * 冲红电子发票：`client.V3InvoiceReverse()`
+    * 获取发票下载信息：`client.V3InvoiceFileUrl()`
+    * 上传电子发票文件：`client.V3InvoiceUploadFile()`
+    * 将电子发票插入微信用户卡包：`client.V3InvoiceInsertCard()`
 * <font color='#07C160' size='4'>分账</font>
     * 请求分账：`client.V3ProfitShareOrder()`
     * 查询分账结果：`client.V3ProfitShareOrderQuery()`
@@ -389,6 +413,15 @@ wechat.V3DecryptCombineNotifyCipherText()
     * 微信明细单号查询明细单：`client.V3PartnerTransferDetail()`
     * 商家批次单号查询批次单：`client.V3PartnerTransferMerchantQuery()`
     * 商家明细单号查询明细单：`client.V3PartnerTransferMerchantDetail()`
+* <font color='#07C160' size='4'>商家转账（新版）</font>
+    * 发起转账：`client.V3TransferBills()`
+    * 撤销转账：`client.V3TransferBillsCancel()`
+    * 商户单号查询转账单：`client.V3TransferBillsMerchantQuery()`
+    * 微信单号查询转账单：`client.V3TransferBillsQuery()`
+    * 商户单号申请电子回单：`client.V3TransferElecsignMerchant()`
+    * 微信单号申请电子回单：`client.V3TransferElecsign()`
+    * 商户单号查询电子回单：`client.V3TransferElecsignQuery()`
+    * 微信单号查询电子回单：`client.V3TransferElecsignMerchantQuery()`
 * <font color='#07C160' size='4'>余额查询</font>
     * 查询特约商户账户实时余额：`client.V3EcommerceBalance()`
     * 查询二级商户账户日终余额：`client.V3EcommerceDayBalance()`
@@ -440,6 +473,9 @@ wechat.V3DecryptCombineNotifyCipherText()
     * 查询省份列表：`client.V3BankSearchProvinceList()`
     * 查询城市列表：`client.V3BankSearchCityList()`
     * 查询支行列表：`client.V3BankSearchBranchList()`
+* <font color='#07C160' size='4'>掌纹支付</font>
+    * 用户自主录掌&预授权：`client.V3PalmServicePreAuthorize()`
+    * 预授权状态查询：`client.V3PalmServiceOpenidQuery()`
 
 
 ### 微信v3公共 API
@@ -476,4 +512,3 @@ wechat.V3DecryptCombineNotifyCipherText()
 * `client.PaySignOfJSAPI()` => 获取 JSAPI 支付 paySign
 * `client.PaySignOfApp()` => 获取 APP 支付 paySign
 * `client.PaySignOfApplet()` => 获取 小程序 支付 paySign
-
