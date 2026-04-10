@@ -508,6 +508,16 @@ xlog.Infof("%+v", phone)
 * <font color='#027AFF' size='4'>邀测站点</font>
   * 营销咨询
     * 商户前置内容咨询接口： `client.PayAppMarketingConsult()`
+  * 订阅
+    * 商品创建接口：`client.TradeProductCreate()`
+    * 商品修改接口：`client.TradeProductModify()`
+    * 商品查询接口：`client.TradeProductQuery()`
+    * 价格创建接口：`client.TradePriceCreate()`
+    * 价格查询接口：`client.TradePriceQuery()`
+    * 客户创建接口：`client.TradeCustomerCreate()`
+    * 订阅创建接口：`client.TradeSubscriptionCreate()`
+    * 订阅修改接口：`client.TradeSubscriptionModify()`
+    * 订阅查询接口：`client.TradeSubscriptionQuery()`
 * <font color='#027AFF' size='4'>可能失效的接口</font>
   * 应用支付宝公钥证书下载：`client.PublicCertDownload()`
   * 小程序生成推广二维码接口：`client.OpenAppQrcodeCreate()`
